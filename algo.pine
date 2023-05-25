@@ -1,0 +1,325 @@
+
+//@version=5
+
+strategy(title = "My Script_1", overlay = true, process_orders_on_close = true, default_qty_type = strategy.cash, default_qty_value = 50000, initial_capital = 10000, currency = currency.GBP)
+
+
+
+
+
+////////////////////////            ///////////////////////          ///////////////////////////////////
+////////////////////////            //   RISK MANGEMENT  //          ///////////////////////////////////
+////////////////////////            ///////////////////////          ///////////////////////////////////
+
+takeProfit_Percent = input.float(defval = 1.5, title = "Take Profit %") / 100
+stopLoss_Percent = input.float(defval = 0.3, title = "Stop Loss %") / 100
+
+Long_TakeProfit = strategy.position_avg_price * (1 + takeProfit_Percent)
+Long_StopLoss = strategy.position_avg_price * (1 - stopLoss_Percent)
+
+
+
+if strategy.position_size > 0
+    strategy.exit(id = "Take_Profit_Long", stop = Long_StopLoss, limit = Long_TakeProfit)
+
+
+////////////////////////            ///////////////////////          ///////////////////////////////////
+////////////////////////            //     DATE & TIME    //          ///////////////////////////////////
+////////////////////////            ///////////////////////          ///////////////////////////////////
+
+start_Month = input.int(defval = 3, title = "Start_Month", minval = 1, maxval = 12)
+start_Day = input.int(defval = 27, title = "Start_Day", minval = 1, maxval = 31)
+start_Year = input.int(defval = 2023, title = "Start_Year", minval = 1990, maxval = 2023)
+end_Month = input.int(defval = 4, title = "end_Month", minval = 1, maxval = 12)
+end_Day = input.int(defval = 27, title = "end_Day", minval = 1, maxval = 31)
+end_Year = input.int(defval = 2023, title = "end_Year", minval = 1990, maxval = 2023)
+
+start_Set = timestamp("UTC+1", start_Year, start_Month, start_Day, 00, 00)
+end_Set = timestamp("UTC+1", end_Year, end_Month, end_Day, 23, 59)
+
+period() => time >= start_Set and time <= end_Set ? true : false
+
+
+
+// -----------------------------------------------------------------INDICATORS---------------------------------------------------------//
+
+
+////////////////////////            ///////////////////////          ///////////////////////////////////
+////////////////////////            //     RSI & EMA     //          ///////////////////////////////////
+////////////////////////            ///////////////////////          ///////////////////////////////////
+
+RSI_Strategy = input.bool(defval = false, title = "RSI Entry")
+
+Period = input.int(title="ZEMA_Period", defval = 5, minval = 1, step = 5)
+EMA1 = ta.ema(close, Period)
+EMA2 = ta.ema(EMA1, Period)
+Difference = EMA1 - EMA2
+ZeroLagEMA = EMA1 + Difference
+
+
+rsi = ta.rsi(input(defval = close, title = "RSI-Source"), input.int(defval = 7, title = "RSI-Length", minval = 0, maxval = 2000, step = 1))
+rsi_EMA = ta.ema(rsi, 10)
+rsi_Mband = hline(50, title = "M_band", color = color.yellow, linestyle = hline.style_solid)
+rsi_Uband = hline(75, title = "U_band", color = color.red, linestyle = hline.style_dotted)
+rsi_Lband = hline(25, title = "L_band", color = color.red, linestyle = hline.style_dotted)
+
+
+////////////////////////            ///////////////////////          ///////////////////////////////////
+////////////////////////            //   BOLINGER BANDS  //          ///////////////////////////////////
+////////////////////////            ///////////////////////          ///////////////////////////////////
+
+Bolinger_Bands = input.bool(defval = false, title = "Bolinger Bands Entry")
+
+bolinger_length = input.int(defval = 20, title = "BB_M_Length")
+bolinger_source = input(defval = close, title = "BB_Source")
+bolinger_multiplier = input.float(defval = 2.0, title = "BB_Multiplier", step = 0.1)
+
+standardDeviation = bolinger_multiplier * ta.stdev(bolinger_source, bolinger_length)
+
+bolinger_Middle_B = ta.ema(bolinger_source, bolinger_length)
+bolinger_Lower_B = bolinger_Middle_B - standardDeviation 
+bolinger_Upper_B = bolinger_Middle_B + standardDeviation 
+
+////////////////////////            ///////////////////////          ///////////////////////////////////
+////////////////////////            //     STOCHASTIC    //          ///////////////////////////////////
+////////////////////////            ///////////////////////          ///////////////////////////////////
+
+Stoch_Strategy = input.bool(defval = false, title = "Stochastic Entry")
+
+K_Stoch = ta.sma(ta.stoch(close, high, low, input.int(defval = 14, title = "K_Stoch Value")), input.int(defval = 5, title = "Stoch SMA Value"))
+D_Stoch = ta.sma(K_Stoch, input.int(defval = 10, title = "D_Stoch Value"))
+
+
+
+
+
+////////////////////////            ///////////////////////          ///////////////////////////////////
+////////////////////////            //  ATR & ENGULFING  //          ///////////////////////////////////
+////////////////////////            ///////////////////////          ///////////////////////////////////
+
+Engulfin_Strategy = input.bool(defval = false, title = "Engulfin Entry")
+
+ATR = ta.atr(input.int(defval = 14, title = "ATR Value"))
+
+bearish_Engulfin = close < open[1] and open > close[1] and (close[1] >= open[1]) and (open - close) >= ((close[1] - open[1]) * 2) and (open - close) >= ATR
+bullish_Engulfin = close > open[1] and open < close[1] and (close[1] <= open[1]) and (close - open) >= ((open[1] - close[1]) * 2) and (close - open) >= ATR
+
+
+
+
+////////////////////////            ///////////////////////          ///////////////////////////////////
+////////////////////////            //     SECURITIES    //          ///////////////////////////////////
+////////////////////////            ///////////////////////          ///////////////////////////////////
+VIX_Entry = input.bool(defval = false, title = "VIX_Entry", group = "For Indicies", tooltip = "Selecte when trading Major Indicies(US100, S&P500, etc. )")
+
+VIX = request.security(symbol = "VIX", timeframe = "D", expression = high)
+
+//VIX < 30
+
+
+
+////////////////////////            ///////////////////////          ///////////////////////////////////
+////////////////////////            //    PIVOT ZONES    //          ///////////////////////////////////
+////////////////////////            ///////////////////////          ///////////////////////////////////
+
+pivots_Zone = input.bool(defval = false, title = "High_Low Pivots")
+
+to_Left_Bars = input.int(defval = 25, title = "Look Back Bars")
+to_Right_Bars = input.int(defval = 5, title = "Bars After Pivot")
+
+pivot_High_Zone = ta.pivothigh(high, to_Left_Bars, to_Right_Bars)
+pivot_Low_Zone = ta.pivotlow(low, to_Left_Bars, to_Right_Bars)
+
+supply_Zone = ta.valuewhen(pivot_High_Zone, high[to_Right_Bars], 0)
+demand_Zone = ta.valuewhen(pivot_Low_Zone, low[to_Right_Bars], 0)
+
+supply_Color_Change = close <= supply_Zone * 0.97 ? color.red : close > supply_Zone * 0.97 and close <= supply_Zone * 0.99 ? color.white : close >= supply_Zone and
+     close[1] < supply_Zone ? color.blue : close >= supply_Zone and close[1] >= supply_Zone ? color.green : na
+demand_Color_Change = close >= demand_Zone * 0.97 ? color.red : close > demand_Zone * 0.97 and close >= demand_Zone * 0.99 ? color.white : close <= demand_Zone and
+     close[1] > demand_Zone ? color.blue : close <= demand_Zone and close[1] <= demand_Zone ? color.green : na
+
+
+
+////////////////////////            ///////////////////////          ///////////////////////////////////
+////////////////////////            //    ALMA TREND     //          ///////////////////////////////////
+////////////////////////            ///////////////////////          ///////////////////////////////////
+
+alma_Trend = input.bool(defval = false, title = "ALMA Entry")
+
+ALMA_10 = ta.alma(close, input.int(defval = 10, title = "Alma 10 Length"), 
+     input.float(defval = 0.85, title = "Alma 10 Offset"), input.int(defval = 6, title = "Alma 10 Sigma"))
+
+ALMA_20 = ta.alma(close, input.int(defval = 20, title = "Alma 20 Length"), 
+     input.float(defval = 0.85, title = "Alma 20 Offset"), input.int(defval = 6, title = "Alma 20 Sigma"))
+
+ALMA_50 = ta.alma(close, input.int(defval = 50, title = "Alma 50 Length"), 
+     input.float(defval = 0.85, title = "Alma 50 Offset"), input.int(defval = 6, title = "Alma 50 Sigma"))
+
+ALMA_200 = ta.alma(close, input.int(defval = 200, title = "Alma 200 Length"), 
+     input.float(defval = 0.85, title = "Alma 200 Offset"), input.int(defval = 6, title = "Alma 200 Sigma"))
+
+
+
+
+
+////////////////////////            ///////////////////////          ///////////////////////////////////
+////////////////////////            //      VOLUMES      //          ///////////////////////////////////
+////////////////////////            ///////////////////////          ///////////////////////////////////
+bar_Color = input.bool(defval = true, title = "Bar Color by VOLUME", group = "Volume Related Indicators", inline = "Volume Indicators")
+
+barcolor(bar_Color == true and volume > volume[5] and close > close[3] ? color.rgb(17, 190, 89) : na)
+
+volume_Avg = volume[20] / 20
+
+
+
+
+
+
+
+
+////////////////////////            ///////////////////////          ///////////////////////////////////
+////////////////////////            //       VWAP        //          ///////////////////////////////////
+////////////////////////            ///////////////////////          ///////////////////////////////////
+VWAP = input.bool(defval = true, title = "VWAP", group = "Volume Related Indicators", inline = "VWAP")
+
+hideonDWM = input(false, title="Hide VWAP on 1D or Above", group="VWAP Settings")
+
+var anchor = input.string(defval = "Session", title="Anchor Period",
+ options=["Session", "Week", "Month", "Quarter", "Year", "Decade", "Century", "Earnings", "Dividends", "Splits"], group="VWAP Settings")
+
+src = input(title = "Source", defval = hlc3, group="VWAP Settings")
+
+new_earnings = request.earnings(syminfo.tickerid, earnings.actual, barmerge.gaps_on, barmerge.lookahead_on, ignore_invalid_symbol=true)
+new_dividends = request.dividends(syminfo.tickerid, dividends.gross, barmerge.gaps_on, barmerge.lookahead_on, ignore_invalid_symbol=true)
+new_split = request.splits(syminfo.tickerid, splits.denominator, barmerge.gaps_on, barmerge.lookahead_on, ignore_invalid_symbol=true)
+
+
+isNewPeriod = switch anchor
+	"Earnings"  => not na(new_earnings)
+	"Dividends" => not na(new_dividends)
+	"Splits"    => not na(new_split)
+	"Session"   => timeframe.change("D")
+	"Week"      => timeframe.change("W")
+	"Month"     => timeframe.change("M")
+	"Quarter"   => timeframe.change("3M")
+	"Year"      => timeframe.change("12M")
+	"Decade"    => timeframe.change("12M") and year % 10 == 0
+	"Century"   => timeframe.change("12M") and year % 100 == 0
+	=> false
+
+isEsdAnchor = anchor == "Earnings" or anchor == "Dividends" or anchor == "Splits"
+if na(src[1]) and not isEsdAnchor
+	isNewPeriod := true
+
+float vwap_Value = na
+
+if not (hideonDWM and timeframe.isdwm)
+    [_vwap, _stdevUpper, _] = ta.vwap(src, isNewPeriod, 1)
+	vwap_Value := _vwap
+    stdevAbs = _stdevUpper - _vwap
+
+var float vwap_prev_Close = na
+show_vwap_Close = input.bool(defval = false, title = "Show VWAP Prev Close", group = "VWAP Setting")
+vwap_prev_Close := isNewPeriod ? vwap_Value[1] : vwap_prev_Close[1]
+
+plot(VWAP ? vwap_Value : na,  title="VWAP", color=#2a9390)
+
+plot(show_vwap_Close ? vwap_prev_Close : na, color = color.yellow, style = plot.style_line, linewidth = 1, show_last = 275)
+
+
+
+
+
+
+//------------------------------------------------------------------------------------------------------------------------------------//
+
+
+////////////////////////            ///////////////////////          ///////////////////////////////////
+////////////////////////        //  LONG & SHORT POSITIONS  //          ///////////////////////////////////
+////////////////////////            ///////////////////////          ///////////////////////////////////
+var is_Short = false
+if strategy.position_size < 0
+    is_Short := true
+
+var is_Long = false
+if strategy.position_size > 0
+    is_Long := true
+
+if strategy.position_size < 1
+    is_Long := false
+
+
+
+long_Position = close > ZeroLagEMA and ta.crossover(K_Stoch, D_Stoch) and ta.crossover(K_Stoch, 50)
+long_Position_2 = close > ZeroLagEMA and bullish_Engulfin and volume > 1000
+long_Position_3 = close > ZeroLagEMA and ta.crossover(rsi, rsi_EMA) and rsi <= 30
+long_Position_4 = close > ALMA_10 and close > ALMA_20 and close > ALMA_50 and close > ALMA_200 and bullish_Engulfin and ta.crossover(rsi, rsi_EMA)
+long_Position_5 = low[1] < vwap_Value and close > vwap_Value
+
+
+
+
+
+if long_Position and Stoch_Strategy == true and is_Short == false
+    strategy.entry(id = "Long_EMA", direction = strategy.long, when = period())
+
+if long_Position_2 and Engulfin_Strategy == true
+    strategy.entry(id = "Engulfing_LONG", direction = strategy.long, when = period())
+
+if long_Position_3 and RSI_Strategy == true
+    strategy.entry(id = "RSI Long", direction = strategy.long, when = period())
+
+if long_Position_4 and alma_Trend == true
+    strategy.entry(id = "ALMA Long", direction = strategy.long, when = period())
+
+if long_Position_5 and VWAP
+    strategy.entry(id = "VWAP_Entry", direction = strategy.long, when = period())
+
+
+if is_Short == true
+    long_Position := false
+if strategy.position_size > -1
+    is_Short := false
+
+
+
+
+
+
+////////////////////////            ///////////////////////          ///////////////////////////////////
+////////////////////////            //  TIME CONDITION   //          ///////////////////////////////////
+////////////////////////            ///////////////////////          ///////////////////////////////////
+
+
+
+Time_Condition = input.bool(defval = false, title = "Time Condition", group = "Holding Positions(Time Period)") 
+
+entry_DEX = 0.0
+entry_DEX := entry_DEX[1]
+
+time_Close = input(defval = 25, title = "Close After # of Bars", group = "Holding Positions(Time Period)", inline = "Time Value")
+
+open_Position = not na(strategy.position_size) and strategy.position_avg_price > 0
+if open_Position and na(entry_DEX)
+    entry_DEX := bar_index
+
+if not na(entry_DEX) and bar_index - entry_DEX + 1 >= time_Close and Time_Condition == true
+    strategy.close(input.string(defval = "Long_EMA", title = "Strat to Close", options = ["Engulfin_LONG", "Short & Bear_Short", "Long_EMA", "RSI Long", "ALMA Long", "VWAP_Entry"]))
+    entry_DEX := na
+
+
+
+////////////////////////            ///////////////////////          ///////////////////////////////////
+////////////////////////            //     PLOTS         //          ///////////////////////////////////
+////////////////////////            ///////////////////////          ///////////////////////////////////
+
+// plot(K_Stoch, "Stochastic_K", color = color.yellow)
+// plot(D_Stoch, "Stochastic_D", color = color.red)
+
+plotchar(bullish_Engulfin, size = size.small, color = color.orange, location = location.belowbar)
+plotchar(bearish_Engulfin, size = size.small, color = color.blue, location = location.abovebar)
+
+
+// plot(supply_Zone, color = supply_Color_Change, trackprice = true, show_last = 1, linewidth = 2)
+// plot(demand_Zone, color = demand_Color_Change, trackprice = true, show_last = 1, linewidth = 2)
